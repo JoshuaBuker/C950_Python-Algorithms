@@ -1,0 +1,12 @@
+ID, Name, Year, Price, City, State
+1, "CITIZEN KANE", 1941, 25.00, Salt Lake City, Utah
+2, "CASABLANCA", 1942, 25.00, Helena, Montana
+3, "THE GODFATHER", 1972, 10.00, Santa Fe, New Mexico
+4, "GONE WITH THE WIND", 1939, 10.00, Austin, Texas
+5, "LAWRENCE OF ARABIA", 1962, 10.00, Lincoln, Nebraska
+6, "THE WIZARD OF OZ", 1939, 10.00, Madison, Wisconsin
+7, "THE GRADUATE", 1967, 5.00, New York, New York
+8, "ON THE WATERFRONT", 1954, 5.00, Columbus, Ohio
+9, "SCHINDLER'S LIST", 1993, 5.00, Raleigh, North Carolina
+10, "SINGIN' IN THE RAIN", 1952, 5.00, Orlando, Florida
+11, "STAR WARS", 1977, 1.00, Montgomery, Alabama
