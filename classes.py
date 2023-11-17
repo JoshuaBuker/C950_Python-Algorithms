@@ -1,5 +1,5 @@
 from enum import Enum
-from datetime import time
+from datetime import *
 import csv
 
 # ============================== STATUS ENUM =================================
@@ -12,7 +12,7 @@ class Status(Enum):
 # ============================= HASH TABLE CLASS =============================
 class HashMap:
     def __init__(self):
-        self.size = 64
+        self.size = 20
         self.map = []
         for i in range(self.size):
             self.map.append([])
@@ -73,6 +73,14 @@ class Graph():
             for row in rd:
                 if (counter >= 1):
                     address = row[1].split("(")[0].strip()
+                    addressSplit = address.split(" ")
+                    for i, str in enumerate(addressSplit):
+                        match str:
+                            case "North": addressSplit[i] = "N"
+                            case "East": addressSplit[i] = "E"
+                            case "South": addressSplit[i] = "S"
+                            case "West": addressSplit[i] = "W"
+                    address = " ".join(addressSplit)
                     Location.LocationMap.add(index, Location(address, False))
                     Location.LocationToIDMap.add(address, index)
                     graphArray.append(row[2:])
@@ -134,6 +142,27 @@ class Graph():
             return False
         else:
             return [min_index, min]
+    
+    def generatePath(self, src, numOfPackages):
+        path = {}
+        currentLocation = src
+        Location.LocationMap.get(currentLocation).setVisited(True)
+
+        for i in range(numOfPackages):
+            coords = self.NearestPointFrom(currentLocation, Location.LocationMap)
+
+            if (coords is not False):
+                path[i] = coords
+                Location.LocationMap.get(coords[0]).setVisited(True)
+                currentLocation = coords[0]
+            else:
+                homeDist = self.DistanceToPoint(currentLocation, 0)
+                path[i] = [0, homeDist]
+                return path
+        homeDist = self.DistanceToPoint(currentLocation, 0)
+        path[i] = [0, homeDist]
+
+        return path
 
 
 
@@ -141,24 +170,61 @@ class Graph():
 class Package():
     PackageMap = HashMap()
 
-    def __init__(self, deadline, address, city, zipCode, weight, specialNotes):
+    def __init__(self, id, address, city, state, zipCode, deadline, weight, specialNotes):
+        self.id = id
         self.deadline = deadline
         self.address = address
         self.city = city
+        self.state = state
         self.zipcode = zipCode
         self.weight = weight
         self.status = Status.HUB
-        self.timeLoaded = None
-        self.timeDelivered = None
+        self.timeLoaded = False
+        self.timeDelivered = False
         self.specialNotes = specialNotes
+
+    @staticmethod
+    def loadCSV(file):
+        counter = 0
+        with open(file, newline='') as csvFile:
+            rd = csv.reader(csvFile, delimiter=',')
+            for row in rd:
+                # print(row)
+                if (counter >= 1):
+                    address = row[1].split("(")[0].strip()
+                    addressSplit = address.split(" ")
+                    for i, str in enumerate(addressSplit):
+                        match str:
+                            case "North": addressSplit[i] = "N"
+                            case "East": addressSplit[i] = "E"
+                            case "South": addressSplit[i] = "S"
+                            case "West": addressSplit[i] = "W"
+                    address = " ".join(addressSplit)
+                    Package.PackageMap.add(int(row[0]), Package(row[0], address, row[2], row[3], row[4], row[5], row[6], row[7]))
+                else:
+                    counter += 1
 
     def setStatus(self, status, currentTime): 
         self.status = status
 
-        if (status == Status.TRANSIT):
-            self.timeLoaded = currentTime
-        elif (status == Status.DELIVERED):
-            self.timeDelivered = currentTime
+        match status:
+            case Status.DELIVERED:
+                self.timeDelivered = currentTime.time()
+            case Status.TRANSIT:
+                self.timeLoaded = currentTime.time()
+
+    def print(self):
+        print("{0:3} {1:40} {2:20} {3:3} {4:8} {5:10} {6:12} {7:12} {8:20}".format(
+            self.id,
+            self.address,
+            self.city,
+            self.state,
+            self.zipcode,
+            self.deadline,
+            self.timeLoaded.strftime("%H:%M"),
+            self.timeDelivered.strftime("%H:%M"),
+            self.status
+        ))
     
 # ============================= LOCATION CLASS ===============================
 class Location():
@@ -174,18 +240,136 @@ class Location():
 
 # =============================== TRUCK CLASS ================================
 class Truck():
-    def __init__(self, label):
+    mph = (1/18)
+
+    def __init__(self, label, start):
         self.label = label
-        self.path = {}
-        self.packages = {}
-        self.currentLocation = Location.IDToLocationMap.get(0)
-        self.clock = time(8, 00, 00)
+        self.path = []
+        self.packages = []
+        self.currentLocation = Location.LocationToIDMap.get("HUB")
+        self.clock = datetime.strptime(start, '%H:%M:%S')
         self.packageMap = Package.PackageMap
-        self.IDToLocationMap = Location.IDToLocationMap
+        self.IDToLocationMap = Location.LocationMap
         self.locationToIDMap = Location.LocationToIDMap
-    
+
     def setPath(self, path):
         self.path = path
     
     def load(self, packages):
         self.packages = packages
+
+        for package in self.packages:
+            package.setStatus(Status.TRANSIT, self.clock)
+
+    def deliverPackages(self, location):
+        deliveredPackages = []
+
+        for idx, package in enumerate(self.packages):
+            if (package.address == location.address):
+                package.setStatus(Status.DELIVERED, self.clock)
+                package.print()
+                deliveredPackages.append(package)
+
+        return deliveredPackages
+    
+    def generatePathForPackages(self, graph):
+        locations = []
+        path = []
+
+        for i in range (0, len(self.packages)):
+            min = 1e7
+            min_index = None
+
+            for idx, val in enumerate(self.packages):
+                id = Location.LocationToIDMap.get(val.address)
+                dist = graph.DistanceToPoint(self.currentLocation, id)
+                distComp = dist
+                if (str(val.deadline) == "EOD"):
+                    distComp += 5
+
+                if (id is not self.currentLocation and distComp < min and Location.LocationMap.get(id).visited == False): # 
+                    min = dist
+                    min_index = id
+            
+            if (min_index is not None):
+                path.append([min_index, min])
+                self.currentLocation = min_index
+                Location.LocationMap.get(min_index).setVisited(True)
+                timeSpent = timedelta(hours=(Truck.mph * dist))
+                self.clock += timeSpent
+                # print(timeSpent)
+                self.deliverPackages(Location.LocationMap.get(min_index))
+                
+
+            else:
+                dist = graph.DistanceToPoint(self.currentLocation, 0)
+                path.append([0, dist])
+                self.currentLocation = 0
+                timeSpent = timedelta(hours=(Truck.mph * dist))
+                self.clock += timeSpent
+                # print(timeSpent)
+                self.path = path
+                return
+
+        dist = graph.DistanceToPoint(self.currentLocation, 0)
+        path.append([0, dist])
+        self.currentLocation = 0
+        self.clock += timedelta(hours=(Truck.mph * dist))
+        self.path = path
+        
+        
+    def getRemainingLocations(self, graph):
+        remainingPackages = []
+        path = []
+
+        for i in range(1, 41):
+            if (Package.PackageMap.get(i).status == Status.HUB):
+                remainingPackages.append(Package.PackageMap.get(i))
+        
+        self.load(remainingPackages)
+        
+        while (len(self.packages) > 0):
+            min = 1e7
+            min_index = None
+
+            for idx, val in enumerate(self.packages):
+                id = Location.LocationToIDMap.get(val.address)
+                dist = graph.DistanceToPoint(self.currentLocation, id)
+                distComp = dist
+                if (str(val.deadline) == "EOD"):
+                    distComp += 10
+                if (id is not self.currentLocation and distComp < min): # 
+                    min = dist
+                    min_index = id
+            
+            if (min_index is not None):
+                path.append([min_index, min])
+                self.currentLocation = min_index
+                Location.LocationMap.get(min_index).setVisited(True)
+                timeSpent = timedelta(hours=(Truck.mph * dist))
+                self.clock += timeSpent
+                # print(timeSpent)
+                packs = self.deliverPackages(Location.LocationMap.get(min_index))
+                for pack in packs:
+                    self.packages.remove(pack)
+
+            else:
+                dist = graph.DistanceToPoint(self.currentLocation, 0)
+                path.append([0, dist])
+                self.currentLocation = 0
+                timeSpent = timedelta(hours=(Truck.mph * dist))
+                self.clock += timeSpent
+                # print(timeSpent)
+                self.path = path
+                return
+
+        dist = graph.DistanceToPoint(self.currentLocation, 0)
+        path.append([0, dist])
+        self.currentLocation = 0
+        self.clock += timedelta(hours=(Truck.mph * dist))
+        self.path = path
+
+        
+
+
+        
