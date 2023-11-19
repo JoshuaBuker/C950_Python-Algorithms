@@ -179,9 +179,10 @@ class Package():
         self.zipcode = zipCode
         self.weight = weight
         self.status = Status.HUB
-        self.timeLoaded = False
-        self.timeDelivered = False
+        self.timeLoaded = 0
+        self.timeDelivered = 0
         self.specialNotes = specialNotes
+        self.deliveredBy = False
 
     @staticmethod
     def loadCSV(file):
@@ -204,8 +205,9 @@ class Package():
                 else:
                     counter += 1
 
-    def setStatus(self, status, currentTime): 
+    def setStatus(self, status, currentTime, truck): 
         self.status = status
+        self.deliveredBy = truck.label
 
         match status:
             case Status.DELIVERED:
@@ -214,16 +216,18 @@ class Package():
                 self.timeLoaded = currentTime.time()
 
     def print(self):
-        print("{0:3} {1:40} {2:20} {3:3} {4:8} {5:10} {6:12} {7:12} {8:20}".format(
+        print("{0:3} {1:40} {2:20} {3:6} {4:10} {5:8} {6:12} {7:16} {8:16} {9:20} {10:16}".format(
             self.id,
             self.address,
             self.city,
             self.state,
             self.zipcode,
+            self.weight,
             self.deadline,
-            self.timeLoaded.strftime("%H:%M"),
-            self.timeDelivered.strftime("%H:%M"),
-            self.status
+            self.timeLoaded.strftime('%H:%M'),
+            self.timeDelivered.strftime('%H:%M'),
+            self.status,
+            self.deliveredBy
         ))
     
 # ============================= LOCATION CLASS ===============================
@@ -259,15 +263,15 @@ class Truck():
         self.packages = packages
 
         for package in self.packages:
-            package.setStatus(Status.TRANSIT, self.clock)
+            package.setStatus(Status.TRANSIT, self.clock, self)
 
     def deliverPackages(self, location):
         deliveredPackages = []
 
         for idx, package in enumerate(self.packages):
             if (package.address == location.address):
-                package.setStatus(Status.DELIVERED, self.clock)
-                package.print()
+                package.setStatus(Status.DELIVERED, self.clock, self)
+                # package.print()
                 deliveredPackages.append(package)
 
         return deliveredPackages
@@ -275,6 +279,8 @@ class Truck():
     def generatePathForPackages(self, graph):
         locations = []
         path = []
+
+        # self.printHeader()
 
         for i in range (0, len(self.packages)):
             min = 1e7
@@ -285,7 +291,7 @@ class Truck():
                 dist = graph.DistanceToPoint(self.currentLocation, id)
                 distComp = dist
                 if (str(val.deadline) == "EOD"):
-                    distComp += 5
+                    distComp += 6
 
                 if (id is not self.currentLocation and distComp < min and Location.LocationMap.get(id).visited == False): # 
                     min = dist
@@ -322,6 +328,8 @@ class Truck():
         remainingPackages = []
         path = []
 
+        # self.printHeader()
+
         for i in range(1, 41):
             if (Package.PackageMap.get(i).status == Status.HUB):
                 remainingPackages.append(Package.PackageMap.get(i))
@@ -337,7 +345,7 @@ class Truck():
                 dist = graph.DistanceToPoint(self.currentLocation, id)
                 distComp = dist
                 if (str(val.deadline) == "EOD"):
-                    distComp += 10
+                    distComp += 6
                 if (id is not self.currentLocation and distComp < min): # 
                     min = dist
                     min_index = id
@@ -368,6 +376,21 @@ class Truck():
         self.currentLocation = 0
         self.clock += timedelta(hours=(Truck.mph * dist))
         self.path = path
+    
+    def printHeader(self):
+        print("\n\n{0:3} {1:40} {2:20} {3:6} {4:10} {5:8} {6:12} {7:16} {8:16} {9:20} {10:16}".format(
+            "ID",
+            "Devliery Address",
+            "City",
+            "State",
+            "Zip Code",
+            "Weight",
+            "Deadline",
+            "Time Loaded",
+            "Time Delivered",
+            "Current Status",
+            "Delivered By"
+        ))
 
         
 
